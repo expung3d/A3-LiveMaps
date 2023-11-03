@@ -62,7 +62,7 @@ if(isNil "MAZ_fnc_makeNewMapDisplay") then {
 
 		MAZ_fnc_makeMapDisplayCtrl = {
 			params ["_name","_object"];
-			waitUntil {uiSleep 0.1; player distance _object < 300 && !visibleMap};
+			waitUntil {uiSleep 0.1; player distance _object < 300 && !visibleMap && ([objNull, "VIEW"] checkVisibility [eyePos player, AGLtoASL (_object modelToWorld [0,-0.4,0.5])]) > 0.7};
 			private _texture = format ["#(rgb,1024,1024,1)ui('RscDisplayEmpty','%1')",_name];
 			private _textureIndex = [_object] call MAZ_fnc_getMapTextureIndex;
 			_object setObjectTexture [_textureIndex,""];
@@ -74,12 +74,13 @@ if(isNil "MAZ_fnc_makeNewMapDisplay") then {
 				private _counter = _object getVariable ["MAZ_map_tryCount",0];
 				if(_counter >= 3) then {
 					systemChat "Failed to create display.";
+					_object setVariable ["MAZ_map_didntLoad",true];
 				} else {
 					if(!isMultiplayer) then {
 						systemChat "Failed to create display... trying again.";
 						systemChat format ["Distance to object: %1. View Distance: %2",(getPos player) distance _object, viewDistance];
 					};
-					_object setVariable ["MAZ_map_tryCount",_counter + 1, true];
+					_object setVariable ["MAZ_map_tryCount",_counter + 1];
 					[_name,_object] spawn MAZ_fnc_makeMapDisplayCtrl;
 				};
 			};
@@ -318,7 +319,8 @@ if(isNil "MAZ_fnc_makeNewMapDisplay") then {
 
 			waitUntil {uiSleep 0.1; !((_object getVariable ["MAZ_map_data",-420]) isEqualType -420)};
 			(_object getVariable "MAZ_map_data") params ["_time","_scale","_pos"];
-			_mapCtrl ctrlMapAnimAdd [0, 0.02, getPos _object];
+			(_object getVariable ["MAZ_map_lastPos",[]]) params [["_initialScale",0.02],["_initialPos",getPos _object]];
+			_mapCtrl ctrlMapAnimAdd [0, _initialScale, _initialPos];
 			ctrlMapAnimCommit _mapCtrl;
 			displayUpdate _display;
 			ctrlDelete _waitingToLoad;
@@ -341,6 +343,7 @@ if(isNil "MAZ_fnc_makeNewMapDisplay") then {
 					};
 					_object setVariable ["MAZ_map_stopAnim",false,true];
 					sleep _delay;
+					_object setVariable ["MAZ_map_lastPos",[_scale,_pos],true];
 				} else {
 					displayUpdate _display;
 					sleep 0.1;
@@ -468,6 +471,29 @@ if(isNil "MAZ_fnc_makeNewMapDisplay") then {
 					} else {
 						_target setVariable ["MAZ_map_drawAIUnits",true,true];
 					};
+				},
+				{},
+				[],
+				0.25,
+				998,
+				false
+			] call BIS_fnc_holdActionAdd;
+			
+			[
+				_object,
+				"Retry Map Creation",
+				"a3\ui_f\data\igui\cfg\holdactions\holdaction_hack_ca.paa",
+				"a3\ui_f\data\igui\cfg\holdactions\holdaction_hack_ca.paa",
+				"_target distance _this < 3 && _target getVariable ['MAZ_map_didntLoad',false]",
+				"true",
+				{},
+				{},
+				{
+					params ["_target", "_caller", "_actionId", "_arguments"];
+					private _name = _target getVariable ["MAZ_map_name",""];
+					if(_name == "") exitWith {};
+					[_name,_target] spawn MAZ_fnc_makeMapDisplayCtrl;
+					_target setVariable ['MAZ_map_didntLoad',false];
 				},
 				{},
 				[],
